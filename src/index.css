@@ -124,3 +124,50 @@ button:focus {
 .prose h3:first-child {
   margin-top: 0;
 }
+
+/* Animaciones del Drawer */
+.drawer-overlay-enter {
+  animation: overlayFadeIn 0.3s ease-out;
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.drawer-slide-enter {
+  animation: drawerSlideIn 0.3s ease-out;
+}
+
+@keyframes drawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Transiciones suaves para elementos interactivos */
+button {
+  transition: all 0.2s ease;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* Focus visible para accesibilidad */
+button:focus-visible {
+  outline: 2px solid #f472b6;
+  outline-offset: 2px;
+}
+
+/* Prevenir scroll cuando drawer está abierto */
+body.drawer-open {
+  overflow: hidden;
+}
