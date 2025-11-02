@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { X, LogOut, Settings, History, Phone } from 'lucide-react';
+import { X, LogOut, History, Phone } from 'lucide-react';
 
 interface DrawerProps {
     isOpen: boolean;

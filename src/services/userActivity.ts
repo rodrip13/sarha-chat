@@ -8,8 +8,6 @@ export interface DBResult<T = any> {
 }
 
 export async function registerSession(userId: string, userAgent: string): Promise<DBResult> {
-  console.log('🔓 [REGISTER SESSION] Registrando sesión de usuario...');
-
   try {
     const { error, data } = await supabase.from("user_sessions").insert({
       user_id: userId,
@@ -23,24 +21,19 @@ export async function registerSession(userId: string, userAgent: string): Promis
         return { success: true, data: null }; // Considerar como éxito
       }
 
-      console.error('❌ [REGISTER SESSION] Error:', error);
+      console.error('❌ [REGISTER SESSION] Error:');
       return { success: false, error };
     }
 
-    console.log('✅ [REGISTER SESSION] Sesión registrada exitosamente');
     return { success: true, data };
   } catch (err) {
-    console.error('❌ [REGISTER SESSION] Error inesperado:', err);
+    console.error('❌ [REGISTER SESSION] Error inesperado:');
     return { success: false, error: err as Error };
   }
 }
 
 export async function closeSession(userId: string): Promise<DBResult> {
-  console.log('🔒 [CLOSE SESSION] Cerrando sesión de usuario...');
-
   try {
-    console.log('🔍 [CLOSE SESSION] Buscando sesión abierta...');
-
     const { data, error } = await supabase
       .from("user_sessions")
       .select("id, login_at")
@@ -57,19 +50,15 @@ export async function closeSession(userId: string): Promise<DBResult> {
         return { success: true, data: null }; // Considerar como éxito
       }
 
-      console.error('❌ [CLOSE SESSION] Error buscando sesión:', error);
+      console.error('❌ [CLOSE SESSION] Error buscando sesión:');
       return { success: false, error };
     }
     
     if (data) {
-      console.log('📋 [CLOSE SESSION] Sesión encontrada, ID:', data.id);
-      
       const now = new Date();
       const loginAt = new Date(data.login_at);
       const duration = Math.floor((now.getTime() - loginAt.getTime()) / 1000);
-      
-      console.log('⏱️ [CLOSE SESSION] Duración de sesión:', duration, 'segundos');
-      
+            
       const { error: updateError, data: updateData } = await supabase
         .from("user_sessions")
         .update({
@@ -79,18 +68,16 @@ export async function closeSession(userId: string): Promise<DBResult> {
         .eq("id", data.id);
         
       if (updateError) {
-        console.error('❌ [CLOSE SESSION] Error actualizando sesión:', updateError);
+        console.error('❌ [CLOSE SESSION] Error actualizando sesión:');
         return { success: false, error: updateError };
       }
-      
-      console.log('✅ [CLOSE SESSION] Sesión cerrada exitosamente');
       return { success: true, data: updateData };
     }
     
     console.warn('⚠️ [CLOSE SESSION] No se encontró sesión abierta');
     return { success: false, error: new Error("Sesión abierta NO encontrada") };
   } catch (err) {
-    console.error('❌ [CLOSE SESSION] Error inesperado:', err);
+    console.error('❌ [CLOSE SESSION] Error inesperado:');
     return { success: false, error: err as Error };
   }
 }
