@@ -6,7 +6,8 @@ import {
   ReactNode,
 } from "react";
 import { supabase } from "../services/supabaseClient";
-import { registerSession, closeSession } from "../services/userActivity";
+import { registerSession, closeSession, cleanupOldData } from "../services/userActivity";
+import { cleanupOldConversations } from "../services/conversationService";
 import { useRef } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -25,7 +26,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [permissions, setPermissions] = useState<string[]>(['access_courses']);
+  const [permissions, setPermissions] = useState<string[]>(['access_courses']); // 🔒 Solo cursos por defecto
   const [loading, setLoading] = useState(true);
 
   // Flags para evitar llamadas duplicadas
@@ -35,6 +36,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 1. Inicialización de sesión solo una vez al montar
   useEffect(() => {
     console.log('🚀 [AUTH INIT] Iniciando verificación de sesión...');
+
+    // 🆕 Limpieza automática de datos antiguos al inicializar
+    try {
+      const cleanedSessions = cleanupOldData();
+      const cleanedConversations = cleanupOldConversations();
+
+      if (cleanedSessions > 0 || cleanedConversations > 0) {
+        console.log(`🧹 [AUTH INIT] Limpieza completada: ${cleanedSessions} sesiones y ${cleanedConversations} conversaciones antiguas eliminadas`);
+      }
+    } catch (error) {
+      console.warn('⚠️ [AUTH INIT] Error en limpieza automática:', error);
+    }
     
     // CRÍTICO: Detectar y limpiar tokens del proyecto viejo
     const oldProjectUrl = 'aiyvpzyslfsuodxbuadb.supabase.co';
@@ -239,7 +252,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // 4. Cargar permisos cuando el usuario cambia
   useEffect(() => {
     if (!user) {
-      setPermissions(['access_courses']);
+      setPermissions(['access_courses']); // 🔒 Solo cursos para usuarios no autenticados
       setLoading(false);
       return;
     }
@@ -255,26 +268,66 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const loadPermissions = async () => {
       try {
-        const { data, error } = await supabase
+        // 🔒 SEGURIDAD: Primero verificar si existe el perfil
+        let { data: existingProfile, error: checkError } = await supabase
           .from('profiles')
           .select('permissions')
           .eq('id', user.id)
           .single();
 
-        if (error) {
-          console.error('❌ [PERMISSIONS LOAD] Error cargando permisos:', error);
+        // Si no existe el perfil, intentar crearlo
+        if (checkError && checkError.code === 'PGRST116') { // No rows returned
+          console.log('📝 [PERMISSIONS LOAD] Perfil no encontrado, creando perfil básico...');
+
+          const { error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              email: user.email,
+              permissions: ['access_courses'], // 🔒 Solo cursos por defecto
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (createError) {
+            console.error('❌ [PERMISSIONS LOAD] Error creando perfil:', createError);
+            setPermissions(['access_courses']); // Fallback seguro
+            return;
+          }
+
+          console.log('✅ [PERMISSIONS LOAD] Perfil creado exitosamente');
           setPermissions(['access_courses']);
-        } else {
-          const userPermissions = data.permissions || ['access_courses'];
-          setPermissions(userPermissions);
-          console.log('✅ [PERMISSIONS LOAD] Permisos cargados:', userPermissions);
-          permissionsLoaded.current.add(user.id); // Marcar como cargado
+          permissionsLoaded.current.add(user.id);
+          return;
         }
+
+        // Si hay error diferente, usar permisos básicos
+        if (checkError) {
+          console.error('❌ [PERMISSIONS LOAD] Error verificando perfil:', checkError);
+          setPermissions(['access_courses']);
+          return;
+        }
+
+        // Perfil existe, usar permisos de la DB
+        const userPermissions = existingProfile?.permissions || ['access_courses'];
+        setPermissions(userPermissions);
+        console.log('✅ [PERMISSIONS LOAD] Permisos cargados desde DB:', userPermissions);
+
+        // 🔍 Debug: Verificar acceso al chat
+        if (userPermissions.includes('access_chat')) {
+          console.log('🎯 [PERMISSIONS LOAD] Usuario tiene acceso al chat');
+        } else {
+          console.log('🚫 [PERMISSIONS LOAD] Usuario NO tiene acceso al chat');
+        }
+
+        permissionsLoaded.current.add(user.id);
+
       } catch (err) {
         console.error('❌ [PERMISSIONS LOAD] Error inesperado:', err);
-        setPermissions(['access_courses']);
+        setPermissions(['access_courses']); // 🔒 Fallback seguro
+        console.warn('⚠️ [PERMISSIONS LOAD] Error inesperado - usando permisos básicos');
       } finally {
-        setLoading(false); // Siempre terminar loading
+        setLoading(false);
       }
     };
 
@@ -332,22 +385,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     console.log('🚪 [SIGN OUT] Iniciando cierre de sesión...');
     console.log('🚪 [SIGN OUT] Usuario actual:', user?.id);
-    
+
     if (user) {
       console.log('💾 [SIGN OUT] Cerrando sesión en base de datos...');
       const result = await closeSession(user.id);
-      
+
       if (!result.success) {
         console.error("❌ [SIGN OUT] Error cerrando sesión en DB:", result.error);
       } else {
         console.log("✅ [SIGN OUT] Sesión cerrada en DB exitosamente");
       }
     }
-    
+
     console.log('🔓 [SIGN OUT] Cerrando sesión en Supabase Auth...');
     await supabase.auth.signOut();
     console.log('✅ [SIGN OUT] Logout completado');
   };
+
+  // 🆕 Función de debug para desarrollo (disponible en window para testing)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugAuth = {
+        session,
+        user,
+        permissions,
+        loading,
+        hasAccessChat: permissions.includes('access_chat'),
+        timestamp: new Date().toISOString()
+      };
+    }
+  }, [session, user, permissions, loading]);
 
   return (
     <AuthContext.Provider

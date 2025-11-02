@@ -6,6 +6,7 @@ import { Drawer } from './Drawer';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { defaultSchema } from 'hast-util-sanitize';
+import { ConversationStorageManager } from '../services/conversationService';
 
 // Permitir elementos GFM seguros (tablas y checkboxes en listas de tareas)
 const sanitizeSchema = {
@@ -53,8 +54,10 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isConversationLoading, setIsConversationLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { user, signOut } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -63,6 +66,144 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 🆕 Cargar conversación más reciente del usuario al montar o cambiar de usuario
+  useEffect(() => {
+    console.log('🔄 [CHAT USEFFECT] Ejecutando useEffect de carga de conversaciones');
+    console.log('📊 [CHAT USEFFECT] Estado actual:', {
+      authLoading,
+      userId: user?.id,
+      hasConversationId: !!conversationId,
+      isConversationLoading,
+      timestamp: new Date().toISOString()
+    });
+
+    // Si la autenticación aún está cargando, esperar
+    if (authLoading) {
+      console.log('⏳ [CHAT] Esperando resolución de autenticación...');
+      setIsConversationLoading(true); // Mostrar indicador de carga
+      return;
+    }
+
+    // Si no hay usuario autenticado, mostrar mensajes por defecto
+    if (!user?.id) {
+      console.log('👤 [CHAT] Usuario no autenticado, mostrando mensajes por defecto');
+      setConversationId(null);
+      setIsConversationLoading(false);
+      // Asegurar que tengamos el mensaje de bienvenida
+      setMessages([{
+        id: '1',
+        text: '¡Hola! Soy Sarha, tu asistente de maternidad. Estoy para ayudarte con todas tus dudas sobre embarazo, nacimiento y puerperio. ¿En qué puedo ayudarte hoy?',
+        isUser: false,
+        timestamp: new Date(),
+      }]);
+      return;
+    }
+
+    // Usuario autenticado, cargar conversaciones
+    console.log('🔄 [CHAT] Usuario autenticado, cargando conversaciones para:', user.id);
+    setIsConversationLoading(true);
+
+    // Pequeño delay para asegurar que el DOM esté listo
+    setTimeout(() => {
+      try {
+        const userConversations = ConversationStorageManager.getUserConversations(user.id);
+        console.log('📊 [CHAT] Conversaciones encontradas:', userConversations.length);
+
+        if (userConversations.length > 0) {
+          // Cargar la conversación más reciente
+          const latestConversation = userConversations[0];
+          console.log('📋 [CHAT] Cargando conversación más reciente:', latestConversation.id);
+
+          setConversationId(latestConversation.id);
+
+          // Convertir mensajes locales al formato del componente
+          const componentMessages: Message[] = latestConversation.messages.map(localMsg => ({
+            id: localMsg.id,
+            text: localMsg.text,
+            isUser: localMsg.isUser,
+            timestamp: new Date(localMsg.timestamp),
+          }));
+
+          // NO agregar mensaje de bienvenida si ya hay mensajes
+          // Solo agregar si la conversación está completamente vacía
+          if (componentMessages.length === 0) {
+            console.log('💬 [CHAT] Conversación vacía, agregando mensaje de bienvenida');
+            componentMessages.unshift({
+              id: 'welcome',
+              text: '¡Hola! Soy Sarha, tu asistente de maternidad. Estoy para ayudarte con todas tus dudas sobre embarazo, nacimiento y puerperio. ¿En qué puedo ayudarte hoy?',
+              isUser: false,
+              timestamp: new Date(),
+            });
+          }
+
+          setMessages(componentMessages);
+          console.log('✅ [CHAT] Conversación cargada exitosamente:', {
+            conversationId: latestConversation.id,
+            messageCount: componentMessages.length,
+            title: latestConversation.title
+          });
+        } else {
+          // No hay conversaciones, crear una nueva
+          console.log('🆕 [CHAT] No hay conversaciones previas, creando nueva');
+          const newConversation = ConversationStorageManager.createConversation(user.id);
+          if (newConversation) {
+            setConversationId(newConversation.id);
+            console.log('✅ [CHAT] Nueva conversación creada:', newConversation.id);
+            // Mantener mensajes por defecto (mensaje de bienvenida ya está incluido)
+          } else {
+            console.error('❌ [CHAT] Error creando nueva conversación');
+            setConversationId(null);
+          }
+        }
+      } catch (error) {
+        console.error('❌ [CHAT] Error cargando conversación:', error);
+        // En caso de error, mantener mensajes por defecto
+        setConversationId(null);
+        setMessages([{
+          id: '1',
+          text: '¡Hola! Soy Sarha, tu asistente de maternidad. Estoy para ayudarte con todas tus dudas sobre embarazo, nacimiento y puerperio. ¿En qué puedo ayudarte hoy?',
+          isUser: false,
+          timestamp: new Date(),
+        }]);
+      } finally {
+        setIsConversationLoading(false);
+      }
+    }, 100); // Pequeño delay para estabilidad
+  }, [user?.id, authLoading]);
+
+  // 🆕 Función de debug para desarrollo (disponible en window para testing)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugChat = {
+        conversationId,
+        isConversationLoading,
+        messageCount: messages.length,
+        userId: user?.id,
+        authLoading,
+        reloadConversations: () => {
+          if (user?.id) {
+            console.log('🔄 [DEBUG] Recargando conversaciones manualmente...');
+            const userConversations = ConversationStorageManager.getUserConversations(user.id);
+            console.log('📊 [DEBUG] Conversaciones encontradas:', userConversations);
+            return userConversations;
+          }
+          return [];
+        },
+        clearConversations: () => {
+          console.log('🗑️ [DEBUG] Limpiando todas las conversaciones...');
+          ConversationStorageManager.clearAll();
+          setMessages([{
+            id: '1',
+            text: '¡Hola! Soy Sarha, tu asistente de maternidad. Estoy para ayudarte con todas tus dudas sobre embarazo, nacimiento y puerperio. ¿En qué puedo ayudarte hoy?',
+            isUser: false,
+            timestamp: new Date(),
+          }]);
+          setConversationId(null);
+        }
+      };
+    }
+  }, [conversationId, isConversationLoading, messages.length, user?.id, authLoading]);
 
   const handleSendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
@@ -78,6 +219,19 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
     setCurrentMessage('');
     setIsLoading(true);
 
+    // 🆕 Guardar mensaje del usuario en localStorage
+    if (conversationId && user?.id) {
+      try {
+        ConversationStorageManager.addMessage(conversationId, {
+          text: userMessage.text,
+          isUser: true,
+          timestamp: userMessage.timestamp.toISOString(),
+        });
+      } catch (error) {
+        console.error('❌ [CHAT] Error guardando mensaje del usuario:', error);
+      }
+    }
+
     try {
       const response = await onSendMessage(currentMessage);
       const aiMessage: Message = {
@@ -87,6 +241,19 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiMessage]);
+
+      // 🆕 Guardar respuesta de IA en localStorage
+      if (conversationId && user?.id) {
+        try {
+          ConversationStorageManager.addMessage(conversationId, {
+            text: aiMessage.text,
+            isUser: false,
+            timestamp: aiMessage.timestamp.toISOString(),
+          });
+        } catch (error) {
+          console.error('❌ [CHAT] Error guardando respuesta de IA:', error);
+        }
+      }
     } catch (error) {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -95,6 +262,19 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+
+      // 🆕 Guardar mensaje de error en localStorage
+      if (conversationId && user?.id) {
+        try {
+          ConversationStorageManager.addMessage(conversationId, {
+            text: errorMessage.text,
+            isUser: false,
+            timestamp: errorMessage.timestamp.toISOString(),
+          });
+        } catch (storageError) {
+          console.error('❌ [CHAT] Error guardando mensaje de error:', storageError);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -147,7 +327,22 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        {messages.map((message) => (
+        {/* Indicador de carga de conversaciones */}
+        {isConversationLoading && (
+          <div className="flex justify-center items-center py-8">
+            <div className="flex flex-col items-center space-y-3">
+              <div className="flex space-x-1">
+                <div className="w-3 h-3 bg-pink-400 rounded-full animate-bounce"></div>
+                <div className="w-3 h-3 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-3 h-3 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              <p className="text-sm text-gray-500">Cargando conversación...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Mensajes */}
+        {!isConversationLoading && messages.map((message) => (
           <div
             key={message.id}
             className={`flex ${message.isUser ? 'justify-end' : 'justify-start'} animate-fade-in`}
@@ -201,6 +396,7 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
           </div>
         ))}
 
+        {/* Indicador de carga de respuesta IA */}
         {isLoading && (
           <div className="flex justify-start animate-fade-in">
             <div className="max-w-xs md:max-w-md lg:max-w-lg">
@@ -226,16 +422,20 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Escribe tu pregunta sobre embarazo, parto o puerperio..."
+              placeholder={
+                isConversationLoading 
+                  ? "Cargando conversación..." 
+                  : "Escribe tu pregunta sobre embarazo, parto o puerperio..."
+              }
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-pink-300 focus:border-transparent transition-all duration-200"
               rows={1}
               style={{ minHeight: '50px', maxHeight: '120px' }}
-              disabled={isLoading}
+              disabled={isLoading || isConversationLoading}
             />
           </div>
           <button
             onClick={handleSendMessage}
-            disabled={!currentMessage.trim() || isLoading}
+            disabled={!currentMessage.trim() || isLoading || isConversationLoading}
             className="p-4 bg-gradient-to-r from-purple-400 to-contessa-400 text-white rounded-full hover:from-pink-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 shadow-md self-center"
           >
             <Send className="w-6 h-6" />

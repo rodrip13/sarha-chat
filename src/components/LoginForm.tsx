@@ -78,7 +78,7 @@ const LoginForm: React.FC = ( ) => {
                 ? "bg-red-50 text-red-800 border border-red-200" 
                 : "bg-blue-50 text-blue-800 border border-blue-200"
             } rounded-lg text-center text-sm`}>
-              {message}
+              Error en las credenciales
             </div>
           )}
 
