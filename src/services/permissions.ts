@@ -227,7 +227,7 @@ export const AVAILABLE_PERMISSIONS = [
   { 
     id: 'access_chat', 
     label: 'Acceso a Chat', 
-    description: 'Permite acceder al chat en shara.losciclosdemarha.uy',
+    description: 'Permite acceder al chat en sarha.losciclosdemarha.uy',
     color: 'green' 
   },
   { 
