@@ -1,5 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Baby } from 'lucide-react';
+import { Send, Baby, Menu } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import { useAuth } from '../context/AuthContext';
+import { Drawer } from './Drawer';
+import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
+import { defaultSchema } from 'hast-util-sanitize';
+
+// Permitir elementos GFM seguros (tablas y checkboxes en listas de tareas)
+const sanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+  ],
+  attributes: {
+    ...defaultSchema.attributes,
+    input: [
+      ...(defaultSchema.attributes?.input || []),
+      ['type', 'checkbox'],
+      ['checked', true],
+      ['disabled', true],
+    ],
+  },
+};
 
 interface Message {
   id: string;
@@ -23,7 +52,9 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user, signOut } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -86,15 +117,31 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-pink-50 via-contessa-50 to-indigo-50">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-pink-100 px-6 py-4 shadow-sm">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-gradient-to-r from-pink-400 to-contessa-500 rounded-full">
-            <Baby className="w-6 h-6 text-white" />
+      <div className="bg-white/80 backdrop-blur-md border-b border-pink-100 px-4 py-4 shadow-sm z-40">
+        <div className="flex items-center justify-between">
+          {/* Botón Hamburguesa (Izquierda) */}
+          <button
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Abrir menú"
+            aria-expanded={isDrawerOpen}
+          >
+            <Menu className="w-6 h-6 text-gray-800" />
+          </button>
+
+          {/* Branding (Centro) */}
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-gradient-to-r from-pink-400 to-contessa-500 rounded-full">
+              <Baby className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-800">Sarha</h1>
+              <p className="text-sm text-gray-600">Tu asistente en maternidad</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Sarha</h1>
-            <p className="text-sm text-gray-600">Tu asistente en maternidad</p>
-          </div>
+
+          {/* Espacio vacío (Derecha para balance) */}
+          <div className="w-10" />
         </div>
       </div>
 
@@ -113,7 +160,39 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
                     : 'bg-white text-gray-800 border border-gray-100'
                 }`}
               >
-                <p className="text-sm leading-relaxed">{message.text}</p>
+                <div className="text-sm leading-relaxed prose prose-sm max-w-none">
+                  {message.isUser ? (
+                    <p>{message.text}</p>
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[[rehypeSanitize, sanitizeSchema]]}
+                      components={{
+                        // Personalizar el estilo de elementos específicos
+                        p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                        strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+
+                        // Listas: marcador fuera + padding izquierdo
+                        ol: ({ children }) => (<ol className="list-decimal list-outside pl-10 my-2 space-y-1">{children}</ol>),
+                        ul: ({ children }) => (<ul className="list-disc list-outside pl-12 my-2 space-y-1">{children}</ul>),
+
+                        // Li: quitar margen del p interno y estilizar ::marker
+                        li: ({ children }) => (<li className="[&>p]:m-0 marker:text-gray-500 marker:opacity-90">{children}</li>),
+
+                        // Checkboxes de listas de tareas
+                        input: (props) => (<input className="mr-2 align-middle translate-y-0.5" {...props} />),
+                        h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                        h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                        h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                        table: ({ children }) => <table className="w-full border-separate border-spacing-y-1">{children}</table>,
+                        th: (props) => <th className="text-left font-semibold px-2 py-1 border-b" {...props} />,
+                        td: (props) => <td className="px-2 py-1 align-top border-b" {...props} />,
+                      }}
+                    >
+                      {message.text}
+                    </ReactMarkdown>
+                  )}
+                </div>
               </div>
               <p className="text-xs text-gray-500 mt-1 px-2">
                 {formatTime(message.timestamp)}
@@ -163,6 +242,14 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
           </button>
         </div>
       </div>
+
+      {/* Drawer */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        userEmail={user?.email}
+        onSignOut={signOut}
+      />
     </div>
   );
 };
