@@ -3,7 +3,7 @@ import { Mail, ArrowRight, Lock, Eye, EyeOff, Baby } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import Spinner from "./Spinner";
 
-const LoginForm: React.FC = ( ) => {
+const LoginForm: React.FC = () => {
 
   const { signInWithEmail, signInWithPassword } = useAuth();
   const [email, setEmail] = useState("");
@@ -32,7 +32,7 @@ const LoginForm: React.FC = ( ) => {
       }
     } catch (error: any) {
       console.error('❌ [LOGIN FORM] Error:', error);
-      setMessage(`Error: ${error.error_description || error.message}`);
+      setMessage(`Error: credenciales invalidas o problema de conexión.`);
     } finally {
       setIsLoading(false);
     }
