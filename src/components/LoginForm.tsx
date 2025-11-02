@@ -32,7 +32,7 @@ const LoginForm: React.FC = () => {
       }
     } catch (error: any) {
       console.error('❌ [LOGIN FORM] Error:', error);
-      setMessage(`Error: credenciales invalidas o problema de conexión.`);
+      setMessage(`Error: credenciales inválidas o problema de conexión.`);
     } finally {
       setIsLoading(false);
     }
