@@ -34,23 +34,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // 1. Inicialización de sesión solo una vez al montar
   useEffect(() => {
-    // CRÍTICO: Detectar y limpiar tokens del proyecto viejo
-    const oldProjectUrl = 'aiyvpzyslfsuodxbuadb.supabase.co';
+    // Detect and clean up tokens from an old Supabase project if configured
+    const oldProjectUrl = process.env.REACT_APP_OLD_SUPABASE_PROJECT_URL;
     let foundOldToken = false;
 
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.includes('supabase.auth.token')) {
-        const value = localStorage.getItem(key);
-        if (value?.includes(oldProjectUrl)) {
-          localStorage.removeItem(key);
-          foundOldToken = true;
+    if (oldProjectUrl) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.includes('supabase.auth.token')) {
+          const value = localStorage.getItem(key);
+          if (value?.includes(oldProjectUrl)) {
+            localStorage.removeItem(key);
+            foundOldToken = true;
+          }
         }
       }
-    }
 
-    if (foundOldToken) {
-      // Token del proyecto viejo encontrado y limpiado
+      if (foundOldToken) {
+        // Token from old project found and cleaned up
+      }
     }
 
     // Crear un timeout para evitar esperas muy largas
