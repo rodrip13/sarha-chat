@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Baby } from 'lucide-react';
+import { Send, Baby, Menu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '../context/AuthContext';
+import { Drawer } from './Drawer';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
 import { defaultSchema } from 'hast-util-sanitize';
@@ -50,7 +52,9 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user, signOut } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -113,15 +117,31 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-pink-50 via-contessa-50 to-indigo-50">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-pink-100 px-6 py-4 shadow-sm">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-gradient-to-r from-pink-400 to-contessa-500 rounded-full">
-            <Baby className="w-6 h-6 text-white" />
+      <div className="bg-white/80 backdrop-blur-md border-b border-pink-100 px-4 py-4 shadow-sm z-40">
+        <div className="flex items-center justify-between">
+          {/* Botón Hamburguesa (Izquierda) */}
+          <button
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Abrir menú"
+            aria-expanded={isDrawerOpen}
+          >
+            <Menu className="w-6 h-6 text-gray-800" />
+          </button>
+
+          {/* Branding (Centro) */}
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-gradient-to-r from-pink-400 to-contessa-500 rounded-full">
+              <Baby className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-800">Sarha</h1>
+              <p className="text-sm text-gray-600">Tu asistente en maternidad</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-800">Sarha</h1>
-            <p className="text-sm text-gray-600">Tu asistente en maternidad</p>
-          </div>
+
+          {/* Espacio vacío (Derecha para balance) */}
+          <div className="w-10" />
         </div>
       </div>
 
@@ -222,6 +242,14 @@ export const Chat: React.FC<ChatProps> = ({ onSendMessage }) => {
           </button>
         </div>
       </div>
+
+      {/* Drawer */}
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        userEmail={user?.email}
+        onSignOut={signOut}
+      />
     </div>
   );
 };
