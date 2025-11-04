@@ -252,6 +252,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         // Session closed successfully in DB
       }
+
+      // CRÍTICO: Limpiar el caché de permisos al logout
+      // Esto asegura que al próximo login se recarguen desde BD
+      permissionsLoaded.current.delete(user.id);
     }
 
     await supabase.auth.signOut();
